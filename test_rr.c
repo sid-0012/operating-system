@@ -208,58 +208,113 @@ void Test4(){
     Exit();
 }
 
-void Test5() {
+// Test 5: Slot reuse after exit
+void Test5()
+{
+    DPrintf("Test 5: Slot reuse after process exit\n");
+    DPrintf("Expect new child to start after an exit\n");
     if (GetSchedPolicy() != ROUNDROBIN) {
         DPrintf("ERROR: Policy is not set to ROUNDROBIN\n");
         Exit();
     }
+    const int BASE_WORK = 50;
+    int children[MAXPROCS];
 
-    DPrintf("Testing MAXPROCS+1 process creation and slot reuse\n");
-    const int BASE_WORK = 100;
-    int children[MAXPROCS + 1];
-
-    // Create MAXPROCS-1 children (parent + children = MAXPROCS)
-    for (int i = 0; i < MAXPROCS - 1; i++) {
+    // Create MAXPROCS-1 children + parent
+    for (int i = 0; i < MAXPROCS - 2; i++) {
         if ((children[i] = Fork()) == 0) {
-            // Child process
-            DPrintf("Child %d started\n", i+1);
+            int proc_num = i + 2;
+            DPrintf("Child %d started\n", proc_num);
+            int start = Gettime();
             for (int j = 0; j < BASE_WORK; j++) {
-                SlowPrintf(1, "%d", i+1);  // Work=1 for clear preemption
+                SlowPrintf(1, "%d", proc_num % 10);
             }
-            DPrintf("\nChild %d exited\n", i+1);
+            int end = Gettime();
+            DPrintf("\nChild %d completed in %d ms\n", proc_num, end - start);
             Exit();
         }
     }
 
-    // Attempt to create additional child (exceeds MAXPROCS)
-    DPrintf("Attempting to create child %d (should block)\n", MAXPROCS);
-    int blocked_child = Fork();
-    if (blocked_child == 0) {
-        DPrintf("Blocked child started\n");
+	if(Fork()==0){
+		DPrintf("Last child exit immediately after creates\n");
+		Exit();
+	}
+
+    // Parent with short work to exit early
+    DPrintf("Parent (Process 1) started\n");
+    int start = Gettime();
+    for (int j = 0; j < BASE_WORK / 2; j++) {
+        SlowPrintf(1, "1");
+    }
+    int end = Gettime();
+    DPrintf("\nParent completed in %d ms\n", end - start);
+
+    // Fork new child immediately after parent’s work
+    int new_child = Fork();
+    if (new_child == 0) {
+        DPrintf("New child (Process %d) started\n", MAXPROCS + 1);
+        int new_start = Gettime();
         for (int j = 0; j < BASE_WORK; j++) {
-            SlowPrintf(1, "X");  // Mark blocked child's output
+            SlowPrintf(1, "X");
         }
-        DPrintf("\nBlocked child exited\n");
+        int new_end = Gettime();
+        DPrintf("\nNew child completed in %d ms\n", new_end - new_start);
         Exit();
+    } else if (new_child == -1) {
+        DPrintf("ERROR: New child fork failed unexpectedly\n");
     } else {
-        DPrintf("Parent continues after blocked fork\n");
+        DPrintf("New child created with PID %d\n", new_child);
     }
 
-    // Parent work (keep parent active to maintain process count)
-    for (int j = 0; j < BASE_WORK; j++) {
-        SlowPrintf(1, "P");  // Parent's work
-    }
-    DPrintf("\nParent work done\n");
-
-    // Wait for children while tracking exits
-    int exited_count = 0;
-    while ((exited_count = Wait(0)) > 0) {
-        DPrintf("Child exited, %d remaining\n", MAXPROCS-1 - exited_count);
-    }
-
-    DPrintf("All children completed\n");
+    // Parent exits immediately after forking new child
     Exit();
 }
+
+// Test 6: Exceeding MAXPROCS before exit
+void Test6()
+{
+    DPrintf("Test 6: Attempt to exceed MAXPROCS before exit\n");
+    DPrintf("Expect fork to fail until a process exits\n");
+    if (GetSchedPolicy() != ROUNDROBIN) {
+        DPrintf("ERROR: Policy is not set to ROUNDROBIN\n");
+        Exit();
+    }
+    const int BASE_WORK = 50;
+    int children[MAXPROCS];
+
+    // Fill MAXPROCS
+    for (int i = 0; i < MAXPROCS - 1; i++) {
+        if ((children[i] = Fork()) == 0) {
+            int proc_num = i + 2;
+            DPrintf("Child %d started\n", proc_num);
+            int start = Gettime();
+            for (int j = 0; j < BASE_WORK; j++) {
+                SlowPrintf(1, "%d", proc_num % 10);
+            }
+            int end = Gettime();
+            DPrintf("\nChild %d completed in %d ms\n", proc_num, end - start);
+            Exit();
+        }
+    }
+
+
+
+    // Try to exceed MAXPROCS
+    int extra_child = Fork();
+    if (extra_child == 0) {
+        DPrintf("ERROR: Extra child started unexpectedly\n");
+        Exit();
+    } else if (extra_child == -1) {
+        DPrintf("Extra fork failed as expected\n");
+    } else {
+        DPrintf("ERROR: Extra fork succeeded unexpectedly\n");
+        Wait(extra_child);
+    }
+
+    
+    Exit();
+}
+
 
 void Main()
 {
@@ -268,7 +323,7 @@ void Main()
         Exit();
     }
 
-    int testnum = 5;  // Change to select test (1-5)
+    int testnum = 6;  // Change to select test (1-5)
     
     switch(testnum) {
         case 1: Test1(); break;
@@ -276,6 +331,7 @@ void Main()
         case 3: Test3(); break;
         case 4: Test4(); break;
         case 5: Test5(); break;
+		case 6: Test6(); break;
         default: Printf("Invalid test"); Exit();
     }
 }
