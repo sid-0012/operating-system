@@ -6,6 +6,7 @@
 #include <sys/types.h>
 #include <signal.h>
 
+
 // Ensure that within each priority level (0 to LMAX), processes execute in FIFO order unless preempted.
 // Test: Create multiple processes at the same level and verify they finish in order of creation unless quantum limits intervene.
 void Test1() {
@@ -94,7 +95,7 @@ void Test3() {
     }
 
 
-    for (int i = 0; i < 3000; i++) SlowPrintf(5, "1");
+    for (int i = 0; i < 550; i++) SlowPrintf(5, "1");
     
     Exit();
 }
@@ -288,6 +289,65 @@ void Test6() {
     Exit();
 }
 
+void Test7() {
+    DPrintf("Test 7: At third times of LMAX and fork. Child get placed at L0 first then parent\n");
+    DPrintf("Add DPrintf to your code when move down levels\n");
+    DPrintf("Add #undef LMAX #define LMAX 10 to mycode3.c to avoid kernel panic! \n");
+    // expect:
+    // Start process 1
+    // Preempt process 0
+    // Test 7: At third times of LMAX and fork. Child get placed at L0 first then parent
+    // Add DPrintf to your code when move down levels
+    // Move down process 1 to level 1
+    // Move down process 1 to level 2
+    // Move down process 1 to level 3
+    // Move down process 1 to level 4
+    // 1Move down process 1 to level 5
+    // 1Move down process 1 to level 6
+    // 11Move down process 1 to level 7
+    // 1111Move down process 1 to level 8
+    // 11111111Move down process 1 to level 9
+    // 1111111111111111Move down process 1 to level 10
+    // 11111111111111111111111111111111Process 1 Stay at LMAX for 1 times
+    // 11111111111111111111111111111111Process 1 Stay at LMAX for 2 times
+    // 11111111111111111111111111111Start process 2
+    // Preempt at third time at LMAX, move to L0
+    // Preempt process 1
+    // 2Move down process 2 to level 1
+    // Move down process 1 to level 1
+    // 2Move down process 2 to level 2
+    // 11Move down process 1 to level 2
+    // 22Move down process 2 to level 3
+    // 1Move down process 1 to level 3
+    // 222Move down process 2 to level 4
+    // 1111Move down process 1 to level 4
+    // 22222222Move down process 2 to level 5
+    // 111111Move down process 1 to level 5
+    // 222222Process 2 exits
+    // 1111111111111111Move down process 1 to level 6
+    // 1111111111111111111111111111Move down process 1 to level 7
+    // 1111111111111111111111111111111111111111111Process 1 exits
+
+    if (GetSchedPolicy() != MLFQ) {
+        DPrintf("ERROR: Policy is not MLFQ\n");
+        Exit();
+    }
+
+    // put process at the middle of the third times in LMAX
+    for (int i = 0; i < 125; i++) SlowPrintf(5, "1");
+
+    if(Fork() == 0){
+        SlowPrintf(1, "222222222222222222222");
+        DPrintf("Process 2 exits\n");
+        Exit();
+    }
+
+    for (int i = 0; i < 100; i++) SlowPrintf(1, "1");
+    DPrintf("Process 1 exits\n");
+    
+    Exit();
+}
+
 
 void Main() {
     if (GetSchedPolicy() != MLFQ) {
@@ -295,7 +355,7 @@ void Main() {
         Exit();
     }
 
-    int testnum = 6; // Change to select test (1-9)
+    int testnum = 7; // Change to select test (1-9)
     switch (testnum) {
         case 1: Test1(); break;
         case 2: Test2(); break;
@@ -303,7 +363,7 @@ void Main() {
         case 4: Test4(); break;
         case 5: Test5(); break;
         case 6: Test6(); break;
-        // case 7: Test7(); break;
+        case 7: Test7(); break;
         // case 8: Test8(); break;
         // case 9: Test9(); break;
         default: Printf("Invalid test number\n"); Exit();
